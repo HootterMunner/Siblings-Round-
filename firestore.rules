@@ -1,0 +1,177 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email != null && request.auth.token.email in [
+          'hootterkanner@gmail.com',
+          'helmyhidayat10@gmail.com',
+          'hoottermunner@gmail.com',
+          'hoottermanner@gmail.com'
+        ]) || (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        )
+      );
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'name', 'role', 'createdAt'])
+        && data.keys().size() == 4
+        && data.email is string && data.email.size() <= 255
+        && data.name is string && data.name.size() <= 100
+        && data.role in ['admin', 'reader']
+        && data.createdAt is number;
+    }
+    
+    function isValidUserUpdate(data) {
+      return (
+        (!('email' in data) || (data.email is string && data.email.size() <= 255)) &&
+        (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+        (!('role' in data) || (data.role in ['admin', 'reader'])) &&
+        (!('createdAt' in data) || (data.createdAt is number))
+      );
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId)
+                    && isValidUser(incoming())
+                    && (
+                      incoming().role == 'reader' || 
+                      (incoming().role == 'admin' && incoming().email in [
+                        'hootterkanner@gmail.com',
+                        'helmyhidayat10@gmail.com',
+                        'hoottermunner@gmail.com',
+                        'hoottermanner@gmail.com'
+                      ])
+                    );
+      allow update: if isValidUserUpdate(incoming())
+                    && (
+                      (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['name']))
+                      ||
+                      isAdmin()
+                    )
+                    && incoming().createdAt == existing().createdAt;
+    }
+
+    function isValidChapter(data) {
+      return data.keys().hasAll(['title', 'content', 'order', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().size() == 6
+        && data.title is string && data.title.size() <= 200
+        && data.content is string && data.content.size() <= 500000
+        && data.order is number
+        && data.status in ['draft', 'published']
+        && data.createdAt is number
+        && data.updatedAt is number;
+    }
+    
+    match /chapters/{chapterId} {
+      allow get: if isValidId(chapterId) && (isAdmin() || resource.data.status == 'published');
+      allow list: if isAdmin() || resource.data.status == 'published';
+      allow create: if isAdmin() && isValidChapter(incoming());
+      allow update: if isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'order', 'status', 'updatedAt']);
+      allow delete: if isAdmin();
+      
+      function isValidComment(data) {
+        return data.keys().hasAll(['chapterId', 'userId', 'userName', 'content', 'createdAt'])
+          && data.keys().size() == 5
+          && data.chapterId is string && data.chapterId.size() <= 128
+          && data.userId is string && data.userId.size() <= 128
+          && data.userName is string && data.userName.size() <= 100
+          && data.content is string && data.content.size() <= 2000
+          && data.createdAt is number;
+      }
+      
+      match /comments/{commentId} {
+        allow read: if isValidId(chapterId);
+        allow create: if isValidId(chapterId) && isSignedIn() 
+                      && isValidComment(incoming())
+                      && incoming().userId == request.auth.uid
+                      && incoming().chapterId == chapterId
+                      && existsAfter(/databases/$(database)/documents/chapters/$(chapterId));
+        allow delete: if isValidId(chapterId) && isValidId(commentId) && (isAdmin() || isOwner(resource.data.userId));
+      }
+      
+      function isValidHighlight(data) {
+        return data.keys().hasAll(['chapterId', 'userId', 'text', 'paragraphIndex', 'createdAt'])
+          && (data.keys().size() == 5 || (data.keys().size() == 6 && 'color' in data))
+          && data.chapterId is string && data.chapterId.size() <= 128
+          && data.userId is string && data.userId.size() <= 128
+          && data.text is string && data.text.size() <= 1000
+          && (!('color' in data) || (data.color in ['yellow', 'red', 'green', 'blue', 'purple']))
+          && data.paragraphIndex is number
+          && data.createdAt is number;
+      }
+      match /highlights/{highlightId} {
+        allow read: if isValidId(chapterId) && isOwner(resource.data.userId);
+        allow create: if isValidId(chapterId) && isSignedIn()
+                      && isValidHighlight(incoming())
+                      && incoming().userId == request.auth.uid
+                      && incoming().chapterId == chapterId;
+        allow delete: if isValidId(chapterId) && isValidId(highlightId) && isOwner(resource.data.userId);
+      }
+    }
+    
+    function isValidBookmark(data) {
+      return data.keys().hasAll(['chapterId', 'userId', 'createdAt'])
+        && data.keys().size() == 3
+        && data.chapterId is string && data.chapterId.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && data.createdAt is number;
+    }
+
+    match /users/{userId}/bookmarks/{bookmarkId} {
+      allow read: if isValidId(userId) && isOwner(userId);
+      allow create: if isValidId(userId) && isOwner(userId)
+                    && isValidBookmark(incoming())
+                    && incoming().userId == userId
+                    && exists(/databases/$(database)/documents/chapters/$(incoming().chapterId));
+      allow delete: if isValidId(userId) && isValidId(bookmarkId) && isOwner(userId);
+    }
+
+    function isValidReadChapter(data) {
+      return data.keys().hasAll(['chapterId', 'userId', 'readAt'])
+        && data.keys().size() == 3
+        && data.chapterId is string && data.chapterId.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && data.readAt is number;
+    }
+
+    match /users/{userId}/readChapters/{chapterId} {
+      allow read: if isValidId(userId) && isOwner(userId);
+      allow create, update: if isValidId(userId) && isOwner(userId)
+                    && isValidReadChapter(incoming())
+                    && incoming().userId == userId
+                    && incoming().chapterId == chapterId
+                    && exists(/databases/$(database)/documents/chapters/$(incoming().chapterId));
+      allow delete: if isValidId(userId) && isValidId(chapterId) && isOwner(userId);
+    }
+
+    function isValidGalleryImage(data) {
+      return data.keys().hasAll(['name', 'fullPath', 'url', 'createdAt'])
+        && data.keys().size() == 4
+        && data.name is string && data.name.size() <= 200
+        && data.fullPath is string && data.fullPath.size() <= 500
+        && data.url is string && data.url.size() <= 1000000
+        && data.createdAt is number;
+    }
+
+    match /gallery/{imageId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidGalleryImage(incoming());
+      allow delete: if isAdmin();
+    }
+  }
+}
+

@@ -1,0 +1,6 @@
+{
+  "name": "Siblings Round",
+  "description": "Platform membaca novel dengan fitur komentar, mode gelap, penanda, dan highlight.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,160 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile containing their roles.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "reader"]
+        },
+        "createdAt": {
+          "type": "number"
+        }
+      },
+      "required": ["email", "name", "role", "createdAt"]
+    },
+    "Chapter": {
+      "title": "Chapter",
+      "description": "A novel chapter.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 500000
+        },
+        "order": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "published"]
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": ["title", "content", "order", "status", "createdAt", "updatedAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "User comment on a chapter.",
+      "type": "object",
+      "properties": {
+        "chapterId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "userName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "createdAt": {
+          "type": "number"
+        }
+      },
+      "required": ["chapterId", "userId", "userName", "content", "createdAt"]
+    },
+    "Bookmark": {
+      "title": "Bookmark",
+      "description": "User's bookmarked chapter.",
+      "type": "object",
+      "properties": {
+        "chapterId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "number"
+        }
+      },
+      "required": ["chapterId", "userId", "createdAt"]
+    },
+    "Highlight": {
+      "title": "Highlight",
+      "description": "User's highlighted text in a chapter.",
+      "type": "object",
+      "properties": {
+        "chapterId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "paragraphIndex": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "number"
+        }
+      },
+      "required": ["chapterId", "userId", "text", "paragraphIndex", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "User profiles. Includes roles like admin for the authors."
+    },
+    "/chapters/{chapterId}": {
+      "schema": {
+        "$ref": "#/entities/Chapter"
+      },
+      "description": "Chapters of the novel. Created and edited by admins."
+    },
+    "/chapters/{chapterId}/comments/{commentId}": {
+      "schema": {
+        "$ref": "#/entities/Comment"
+      },
+      "description": "Comments on a specific chapter."
+    },
+    "/users/{userId}/bookmarks/{bookmarkId}": {
+      "schema": {
+        "$ref": "#/entities/Bookmark"
+      },
+      "description": "User's bookmarked chapters."
+    },
+    "/chapters/{chapterId}/highlights/{highlightId}": {
+      "schema": {
+        "$ref": "#/entities/Highlight"
+      },
+      "description": "Highlights on a chapter. We put it under chapter so everyone can potentially see them, or just the user."
+    }
+  }
+}

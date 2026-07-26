@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:fullscreen header,
+:fullscreen footer {
+  display: none !important;
+}
+
+html:fullscreen {
+  background-color: white;
+}
+
+@media (prefers-color-scheme: dark) {
+  html.dark:fullscreen {
+    background-color: #030712; /* gray-950 */
+  }
+}
+
+@keyframes fog-drift {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-3%, 3%) scale(1.05); }
+  66% { transform: translate(2%, -2%) scale(0.95); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+.animate-fog {
+  animation: fog-drift 40s ease-in-out infinite;
+}
