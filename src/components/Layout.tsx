@@ -2,7 +2,7 @@ import React from 'react';
 import { Outlet, Link } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { Moon, Sun, BookOpen, LogIn, LogOut, Settings, Bookmark } from 'lucide-react';
+import { Moon, Sun, BookOpen, LogIn, LogOut, Shield, Bookmark } from 'lucide-react';
 
 export default function Layout() {
   const { user, profile, isAdmin, signIn, signOut } = useAuth();
@@ -30,7 +30,7 @@ export default function Layout() {
               <div className="flex items-center gap-3">
                 {isAdmin && (
                   <Link to="/admin" className="text-sm font-medium hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1">
-                    <Settings className="w-4 h-4" />
+                    <Shield className="w-4 h-4" />
                     <span className="hidden sm:inline">Admin</span>
                   </Link>
                 )}

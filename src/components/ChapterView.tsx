@@ -5,7 +5,7 @@ import { db } from '../lib/firebase';
 import { Chapter, Comment, Bookmark, Highlight } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { format } from 'date-fns';
-import { Bookmark as BookmarkIcon, BookmarkCheck, MessageSquare, Highlighter, Trash2, ArrowUp, History, List, X, Eye, EyeOff, Settings2, Maximize, Minimize, CheckCircle2, ArrowRight, Check } from 'lucide-react';
+import { Bookmark as BookmarkIcon, BookmarkCheck, MessageSquare, Highlighter, Trash2, ArrowUp, History, List, X, Eye, EyeOff, Settings2, Maximize, Minimize, CheckCircle2, ArrowRight, Check, Volume2, VolumeX, Settings } from 'lucide-react';
 import ChapterContent from './ChapterContent';
 
 interface BookmarkHistoryItem {
@@ -31,10 +31,35 @@ export default function ChapterView() {
   const [loading, setLoading] = useState(true);
   
   const [selectionRect, setSelectionRect] = useState<{top: number, left: number, width: number} | null>(null);
-  const [showHighlights, setShowHighlights] = useState(true);
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [readingProgress, setReadingProgress] = useState(0);
+
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settings, setSettings] = useState({
+    showHighlights: true,
+    muteMusic: false,
+    voiceVolume: 1.0,
+    sfxVolume: 1.0,
+    musicVolume: 0.5,
+  });
+
+  useEffect(() => {
+    const saved = localStorage.getItem('readerSettings');
+    if (saved) {
+      try {
+        setSettings(prev => ({...prev, ...JSON.parse(saved)}));
+      } catch(e){}
+    }
+  }, []);
+
+  const updateSettings = (newSettings: Partial<typeof settings>) => {
+    setSettings(prev => {
+      const updated = { ...prev, ...newSettings };
+      localStorage.setItem('readerSettings', JSON.stringify(updated));
+      return updated;
+    });
+  };
   
   // Read progress state
   const [showScrollPrompt, setShowScrollPrompt] = useState(false);
@@ -448,8 +473,8 @@ export default function ChapterView() {
       }
     };
 
-    if (!showHighlights) {
-      setShowHighlights(true);
+    if (!settings.showHighlights) {
+      updateSettings({ showHighlights: true });
       setTimeout(executeScroll, 150);
     } else {
       executeScroll();
@@ -636,23 +661,13 @@ export default function ChapterView() {
             
             <button
               onClick={() => {
-                setShowHighlights(!showHighlights);
-              }}
-              className="p-3 bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 transition"
-              title={showHighlights ? "Sembunyikan Highlight" : "Tampilkan Highlight"}
-            >
-              {showHighlights ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
-
-            <button
-              onClick={() => {
-                toggleFullscreen();
+                setShowSettingsModal(true);
                 setIsFabMenuOpen(false);
               }}
               className="p-3 bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 transition"
-              title={isFullscreen ? "Keluar Layar Penuh" : "Layar Penuh"}
+              title="Pengaturan Baca"
             >
-              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+              <Settings className="w-5 h-5" />
             </button>
           </div>
         )}
@@ -669,6 +684,96 @@ export default function ChapterView() {
           >
             {isFabMenuOpen ? <X className="w-5 h-5" /> : <Settings2 className="w-5 h-5" />}
           </button>
+        )}
+        
+        {/* Settings Modal */}
+        {showSettingsModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-sm overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700">
+                <h3 className="font-semibold text-lg text-gray-800 dark:text-white flex items-center gap-2">
+                  <Settings className="w-5 h-5" /> Pengaturan Baca
+                </h3>
+                <button onClick={() => setShowSettingsModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-4 space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Tampilkan Highlight</span>
+                    <button 
+                      onClick={() => updateSettings({ showHighlights: !settings.showHighlights })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.showHighlights ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.showHighlights ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Bisu Musik (Music)</span>
+                    <button 
+                      onClick={() => updateSettings({ muteMusic: !settings.muteMusic })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.muteMusic ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.muteMusic ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Layar Penuh</span>
+                    <button 
+                      onClick={() => { toggleFullscreen(); setShowSettingsModal(false); }}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isFullscreen ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isFullscreen ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Volume</h4>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Suara Karakter (Voice)</span>
+                      <span>{Math.round(settings.voiceVolume * 100)}%</span>
+                    </div>
+                    <input 
+                      type="range" min="0" max="1" step="0.05" 
+                      value={settings.voiceVolume}
+                      onChange={(e) => updateSettings({ voiceVolume: parseFloat(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-indigo-600"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Efek Suara (SFX)</span>
+                      <span>{Math.round(settings.sfxVolume * 100)}%</span>
+                    </div>
+                    <input 
+                      type="range" min="0" max="1" step="0.05" 
+                      value={settings.sfxVolume}
+                      onChange={(e) => updateSettings({ sfxVolume: parseFloat(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-indigo-600"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Musik (Music)</span>
+                      <span>{Math.round(settings.musicVolume * 100)}%</span>
+                    </div>
+                    <input 
+                      type="range" min="0" max="1" step="0.05" 
+                      value={settings.musicVolume}
+                      onChange={(e) => updateSettings({ musicVolume: parseFloat(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-indigo-600"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -703,10 +808,11 @@ export default function ChapterView() {
           <ChapterContent
             content={chapter.content}
             highlights={highlights}
-            showHighlights={showHighlights}
+            showHighlights={settings.showHighlights}
             onPointerUp={handlePointerUp}
             contentRef={contentRef}
             chapterOrder={chapter.order}
+            settings={settings}
           />
           
           {manualMarkerPos !== null && (

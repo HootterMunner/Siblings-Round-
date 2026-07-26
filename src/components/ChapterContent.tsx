@@ -11,9 +11,15 @@ interface ChapterContentProps {
   onPointerUp: () => void;
   contentRef: React.RefObject<HTMLDivElement>;
   chapterOrder?: number;
+  settings: {
+    muteMusic: boolean;
+    voiceVolume: number;
+    sfxVolume: number;
+    musicVolume: number;
+  };
 }
 
-const ChapterContent = React.memo(({ content, highlights, showHighlights, onPointerUp, contentRef, chapterOrder }: ChapterContentProps) => {
+const ChapterContent = React.memo(({ content, highlights, showHighlights, onPointerUp, contentRef, chapterOrder, settings }: ChapterContentProps) => {
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [playbackRate, setPlaybackRate] = useState<number>(1);
@@ -164,7 +170,9 @@ const ChapterContent = React.memo(({ content, highlights, showHighlights, onPoin
 
   // Hybrid Audio System (MP3 + TTS Fallback)
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const bgmRef = React.useRef<HTMLAudioElement | null>(null);
   const currentPlaybackIndex = React.useRef<number | null>(null);
+  const currentAudioType = React.useRef<'voice' | 'sfx' | null>(null);
 
   
   const renderedParagraphs = useMemo(() => {
@@ -256,6 +264,31 @@ const ChapterContent = React.memo(({ content, highlights, showHighlights, onPoin
         const contentType = response.headers.get('content-type');
         if (response.ok && contentType && (contentType.includes('audio') || contentType.includes('mpeg') || contentType.includes('octet-stream'))) {
           const audio = new Audio(targetAudioUrl);
+          
+          const isMusic = voiceMatch && /\[(?:music|lagu):/i.test(voiceMatch[0]);
+          const isSfx = voiceMatch && /\[(?:sfx|efek):/i.test(voiceMatch[0]);
+          
+          if (isMusic) {
+            const currentSrc = bgmRef.current && bgmRef.current.src ? new URL(bgmRef.current.src).pathname : '';
+            if (currentSrc !== targetAudioUrl) {
+              if (bgmRef.current) {
+                bgmRef.current.pause();
+                bgmRef.current.removeAttribute('src');
+              }
+              audio.loop = true;
+              audio.volume = settings.muteMusic ? 0 : settings.musicVolume;
+              bgmRef.current = audio;
+              audio.play().catch(e => console.warn("BGM play failed", e));
+            }
+            
+            if (currentPlaybackIndex.current === index) {
+              playNext(index + 1);
+            }
+            return;
+          }
+
+          currentAudioType.current = isSfx ? 'sfx' : 'voice';
+          audio.volume = isSfx ? settings.sfxVolume : settings.voiceVolume;
           audio.playbackRate = playbackRate;
           audioRef.current = audio;
           
@@ -267,7 +300,7 @@ const ChapterContent = React.memo(({ content, highlights, showHighlights, onPoin
           
           audio.onerror = () => {
             if (currentPlaybackIndex.current === index) {
-              if (voiceMatch && /\[(?:sfx|efek|music|lagu):/i.test(voiceMatch[0])) {
+              if (voiceMatch && /\[(?:sfx|efek):/i.test(voiceMatch[0])) {
                 playNext(index + 1);
               } else {
                 playTTS(index);
@@ -278,7 +311,7 @@ const ChapterContent = React.memo(({ content, highlights, showHighlights, onPoin
           audio.play().catch(e => {
             if (currentPlaybackIndex.current === index) {
               console.warn("Audio play failed, falling back to TTS", e);
-              if (voiceMatch && /\[(?:sfx|efek|music|lagu):/i.test(voiceMatch[0])) {
+              if (voiceMatch && /\[(?:sfx|efek):/i.test(voiceMatch[0])) {
                 playNext(index + 1);
               } else {
                 playTTS(index);
@@ -380,12 +413,15 @@ const ChapterContent = React.memo(({ content, highlights, showHighlights, onPoin
     if (isPaused) {
       if (audioRef.current) {
         audioRef.current.play();
-      } else if (synth) {
+      } else if (synth && currentPlaybackIndex.current !== null && textParagraphIndexes[currentPlaybackIndex.current] !== null) {
         try {
           synth.resume();
         } catch (err) {
           console.warn("Error resuming speech:", err);
         }
+      }
+      if (bgmRef.current) {
+        bgmRef.current.play().catch(e => console.warn("BGM resume failed", e));
       }
       setIsPaused(false);
     } else {
@@ -397,6 +433,9 @@ const ChapterContent = React.memo(({ content, highlights, showHighlights, onPoin
         } catch (err) {
           console.warn("Error pausing speech:", err);
         }
+      }
+      if (bgmRef.current) {
+        bgmRef.current.pause();
       }
       setIsPaused(true);
     }
@@ -502,6 +541,10 @@ const ChapterContent = React.memo(({ content, highlights, showHighlights, onPoin
         audioRef.current.pause();
         audioRef.current.removeAttribute('src');
       }
+      if (bgmRef.current) {
+        bgmRef.current.pause();
+        bgmRef.current.removeAttribute('src');
+      }
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         try {
           window.speechSynthesis.cancel();
@@ -523,10 +566,81 @@ const ChapterContent = React.memo(({ content, highlights, showHighlights, onPoin
   }, [playingIndex]);
 
   useEffect(() => {
+    if (bgmRef.current) {
+      bgmRef.current.volume = settings.muteMusic ? 0 : settings.musicVolume;
+    }
+  }, [settings.muteMusic, settings.musicVolume]);
+
+  useEffect(() => {
+    if (audioRef.current && currentAudioType.current) {
+      audioRef.current.volume = currentAudioType.current === 'sfx' ? settings.sfxVolume : settings.voiceVolume;
+    }
+  }, [settings.sfxVolume, settings.voiceVolume]);
+
+  useEffect(() => {
     if (audioRef.current) {
       audioRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate]);
+
+  // Initial Background Music setup
+  useEffect(() => {
+    let bgmUrl: string | null = null;
+    for (const p of paragraphs) {
+      const match = p.match(/\[(?:music|lagu):\s*(.*?)\]/i);
+      if (match) {
+        let explicitUrl = match[1].trim();
+        if (!explicitUrl.startsWith('/') && !explicitUrl.startsWith('http')) {
+          if (!explicitUrl.toLowerCase().endsWith('.mp3') && !explicitUrl.toLowerCase().endsWith('.wav')) {
+             explicitUrl += '.mp3';
+          }
+          explicitUrl = `/audio/music/${explicitUrl}`;
+        } else {
+          explicitUrl = explicitUrl.replace(/^\/public\//, '/');
+        }
+        bgmUrl = explicitUrl;
+        break;
+      }
+    }
+
+    if (bgmUrl) {
+      const absoluteTargetUrl = new URL(bgmUrl, window.location.origin).pathname;
+      const currentSrc = bgmRef.current && bgmRef.current.src ? new URL(bgmRef.current.src).pathname : '';
+      
+      if (currentSrc !== absoluteTargetUrl) {
+        if (bgmRef.current) {
+          bgmRef.current.pause();
+          bgmRef.current.removeAttribute('src');
+        }
+        const audio = new Audio(bgmUrl);
+        audio.loop = true;
+        audio.volume = settings.muteMusic ? 0 : settings.musicVolume;
+        bgmRef.current = audio;
+        
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(e => {
+            console.warn("BGM autoplay prevented. Waiting for interaction.", e);
+            const playOnInteract = () => {
+               if (bgmRef.current) {
+                 bgmRef.current.play().catch(e => console.warn(e));
+               }
+               document.removeEventListener('click', playOnInteract);
+               document.removeEventListener('keydown', playOnInteract);
+               document.removeEventListener('touchstart', playOnInteract);
+               document.removeEventListener('scroll', playOnInteract);
+            };
+            document.addEventListener('click', playOnInteract);
+            document.addEventListener('keydown', playOnInteract);
+            document.addEventListener('touchstart', playOnInteract);
+            document.addEventListener('scroll', playOnInteract, { once: true });
+          });
+        }
+      }
+    }
+    // We intentionally don't clear bgmRef on paragraphs change here 
+    // because that would stop it immediately. We let it be managed or stopped on unmount.
+  }, [paragraphs]);
 
   const cyclePlaybackRate = () => {
     const rates = [0.75, 1, 1.25, 1.5, 2];
@@ -553,7 +667,7 @@ const ChapterContent = React.memo(({ content, highlights, showHighlights, onPoin
       {playingIndex !== null && (
         <div className="fixed bottom-0 left-0 sm:left-8 md:left-16 lg:left-24 z-40 pointer-events-none fade-in slide-in-from-bottom-10 animate-in duration-700">
           <img 
-            src={`/sprite/Yuiki.png`} 
+            src={`/image/sprite/Yuiki.png`} 
             alt="Yuki Narrator" 
             className={`w-32 sm:w-48 md:w-64 lg:w-72 object-contain transition-transform duration-500 ${!isPaused ? 'scale-105' : 'scale-100 opacity-80'}`}
             style={{ 
@@ -712,7 +826,8 @@ const ChapterContent = React.memo(({ content, highlights, showHighlights, onPoin
   return prev.content === next.content && 
          prev.showHighlights === next.showHighlights && 
          prev.chapterOrder === next.chapterOrder &&
-         JSON.stringify(prev.highlights) === JSON.stringify(next.highlights);
+         JSON.stringify(prev.highlights) === JSON.stringify(next.highlights) &&
+         JSON.stringify(prev.settings) === JSON.stringify(next.settings);
 });
 
 export default ChapterContent;
